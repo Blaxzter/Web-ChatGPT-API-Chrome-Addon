@@ -31,6 +31,9 @@ class QueryRequest(BaseModel):
     startNewChat: bool = Field(
         True, description="Whether to create a new chat before executing"
     )
+    useTemporaryChat: bool = Field(
+        True, description="Whether to use temporary chat mode (disable for image generation)"
+    )
 
 
 # Data model for prompt message data sent to addon
@@ -42,6 +45,18 @@ class PromptMessageData(BaseModel):
         True, description="Whether to create a new chat before executing"
     )
     image: str | None = Field(None, description="Base64 encoded image data (optional)")
+    useTemporaryChat: bool = Field(
+        True, description="Whether to use temporary chat mode (disable for image generation)"
+    )
+
+
+# Data model for generated image from ChatGPT
+class GeneratedImageData(BaseModel):
+    """Data structure for generated images from ChatGPT."""
+
+    url: str = Field(..., description="Original URL of the generated image")
+    base64: str = Field(..., description="Base64 encoded image data")
+    alt: str = Field(..., description="Alt text for the image")
 
 
 # Data model for response data received from addon
@@ -51,7 +66,11 @@ class ResponseMessageData(BaseModel):
     status: Literal["success", "error"] = Field(
         ..., description="Status of the response"
     )
-    response: str = Field(..., description="The response text from ChatGPT")
+    response: str | None = Field(None, description="The response text from ChatGPT")
+    reason: str | None = Field(None, description="Error reason when status is 'error'")
+    generatedImage: GeneratedImageData | None = Field(
+        None, description="Generated image data if present"
+    )
 
 
 # Data model for messages exchanged over WebSocket
@@ -83,6 +102,9 @@ class QuerySuccessResponse(BaseModel):
     status: Literal["success"] = Field("success", description="Response status")
     request_id: str = Field(..., description="Unique request identifier")
     response: str = Field(..., description="The response text from ChatGPT")
+    generatedImage: GeneratedImageData | None = Field(
+        None, description="Generated image data if present"
+    )
 
 
 class QueryErrorResponse(BaseModel):
@@ -164,16 +186,30 @@ class ConnectionManager:
         if message.id in self.pending_requests:
             future = self.pending_requests.pop(message.id)
             if not future.done():
-                # If data is a dict with status/response structure, extract or pass as-is
-                if isinstance(message.data, dict):
-                    # Check if it's an error response
-                    if message.data.get("status") == "error":
+                # Handle ResponseMessageData Pydantic model
+                if isinstance(message.data, ResponseMessageData):
+                    if message.data.status == "error":
+                        error_detail = message.data.reason or message.data.response or "Unknown error from addon"
                         future.set_exception(
                             HTTPException(
                                 status_code=400,
-                                detail=message.data.get(
-                                    "response", "Unknown error from addon"
-                                ),
+                                detail=error_detail,
+                            )
+                        )
+                    else:
+                        # For success responses, convert to dict
+                        future.set_result(message.data.model_dump())
+                # If data is a dict with status/response structure, extract or pass as-is
+                elif isinstance(message.data, dict):
+                    # Check if it's an error response
+                    if message.data.get("status") == "error":
+                        error_detail = message.data.get(
+                            "reason", message.data.get("response", "Unknown error from addon")
+                        )
+                        future.set_exception(
+                            HTTPException(
+                                status_code=400,
+                                detail=error_detail,
                             )
                         )
                     else:
@@ -183,7 +219,7 @@ class ConnectionManager:
                     # For simple string responses
                     future.set_result(message.data)
                 else:
-                    # For Pydantic model responses, convert to dict
+                    # For other Pydantic model responses, convert to dict
                     if hasattr(message.data, "model_dump"):
                         future.set_result(message.data.model_dump())
                     else:
@@ -196,6 +232,38 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+def truncate_base64_in_log(data: str) -> str:
+    """
+    Truncate base64 encoded strings in log messages for readability.
+    Replaces long base64 strings with a placeholder showing their length.
+    """
+    import json
+    import re
+    
+    try:
+        # Try to parse as JSON
+        parsed = json.loads(data)
+        
+        # Recursively truncate base64 strings in the parsed data
+        def truncate_recursive(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                return {k: truncate_recursive(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [truncate_recursive(item) for item in obj]
+            elif isinstance(obj, str):
+                # Check if it looks like base64 (long string with base64 characters)
+                if len(obj) > 100 and re.match(r'^[A-Za-z0-9+/=]+$', obj):
+                    return f"<base64 data: {len(obj)} chars>"
+                return obj
+            return obj
+        
+        truncated = truncate_recursive(parsed)
+        return json.dumps(truncated, indent=2)
+    except (json.JSONDecodeError, Exception):
+        # If not JSON or error, just return original
+        return data
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -232,11 +300,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     try:
         while True:
             data = await websocket.receive_text()
-            logging.info(f"Received raw message from client: {data}")
+            logging.info(f"Received raw message from client: {truncate_base64_in_log(data)}")
             try:
                 msg = WebSocketMessage.model_validate_json(data)
                 if msg.type == "response":
                     manager.complete_request(msg)
+                elif msg.type == "control":
+                    # Handle control messages like keep-alive pings
+                    logging.debug(f"Received control message: {msg.data}")
+                    # Could send a pong back if needed
                 else:
                     logging.warning(
                         f"Received unhandled message type: {msg.type} with ID: {msg.id}"
@@ -261,13 +333,15 @@ async def send_query(query_request: QueryRequest) -> dict[str, Any]:
         {
             "prompt": "What's in this image?",
             "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-            "startNewChat": true
+            "startNewChat": true,
+            "useTemporaryChat": false
         }
 
     Parameters:
         - prompt: The text prompt to send to ChatGPT
         - image: Optional base64-encoded image data
         - startNewChat: Whether to create a new chat before executing (default: true)
+        - useTemporaryChat: Whether to use temporary chat mode (default: true, set false for image generation)
 
     Returns:
         QuerySuccessResponse with status, request_id, and response text
@@ -283,6 +357,7 @@ async def send_query(query_request: QueryRequest) -> dict[str, Any]:
         prompt=query_request.prompt,
         startNewChat=query_request.startNewChat,
         image=query_request.image,
+        useTemporaryChat=query_request.useTemporaryChat,
     )
 
     prompt_message = WebSocketMessage(id=request_id, type="prompt", data=message_data)
@@ -319,6 +394,7 @@ async def send_query_with_upload(
     prompt: str = Form(...),
     image: UploadFile | None = File(None),
     startNewChat: bool = Form(True),
+    useTemporaryChat: bool = Form(True),
 ) -> dict[str, Any]:
     """
     Send a query with optional file upload (image will be auto-encoded to base64).
@@ -343,6 +419,7 @@ async def send_query_with_upload(
         - prompt: The text prompt to send to ChatGPT
         - image: Optional image file to upload
         - startNewChat: Whether to create a new chat before executing (default: true)
+        - useTemporaryChat: Whether to use temporary chat mode (default: true, set false for image generation)
 
     Returns:
         QuerySuccessResponse with status, request_id, and response text
@@ -375,7 +452,7 @@ async def send_query_with_upload(
 
     # Create structured message data using Pydantic model
     message_data = PromptMessageData(
-        prompt=prompt, startNewChat=startNewChat, image=image_base64
+        prompt=prompt, startNewChat=startNewChat, image=image_base64, useTemporaryChat=useTemporaryChat
     )
 
     prompt_message = WebSocketMessage(id=request_id, type="prompt", data=message_data)

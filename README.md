@@ -4,16 +4,17 @@ A Chrome extension and Python FastAPI backend that work together to automate int
 
 ## Features
 
-- **Text Prompts:** Send text prompts to ChatGPT programmatically
-- **Image Support:** Upload and send images alongside prompts (base64 or file upload)
-- **Response Retrieval:** Automatically capture and return ChatGPT's responses
-- **Chat Management:** Create new chats or continue in existing sessions
-- **Temporary Chat Mode:** Automatically activates temporary chat for privacy
-- **WebSocket Communication:** Persistent two-way connection between addon and server
-- **RESTful API:** Simple HTTP endpoints for integration with other applications
-- **Health Monitoring:** Built-in health check and connection status monitoring
-- **Auto-Reconnection:** Automatic WebSocket reconnection with exponential backoff
-- **Status UI:** Chrome popup showing real-time connection and tab information
+-   **Text Prompts:** Send text prompts to ChatGPT programmatically
+-   **Image Support:** Upload and send images alongside prompts (base64 or file upload)
+-   **Image Generation:** Automatically detects and retrieves generated images from ChatGPT responses
+-   **Response Retrieval:** Automatically capture and return ChatGPT's responses
+-   **Chat Management:** Create new chats or continue in existing sessions
+-   **Temporary Chat Mode:** Automatically activates temporary chat for privacy
+-   **WebSocket Communication:** Persistent two-way connection between addon and server
+-   **RESTful API:** Simple HTTP endpoints for integration with other applications
+-   **Health Monitoring:** Built-in health check and connection status monitoring
+-   **Auto-Reconnection:** Automatic WebSocket reconnection with exponential backoff
+-   **Status UI:** Chrome popup showing real-time connection and tab information
 
 ## Architecture
 
@@ -44,80 +45,80 @@ gpt-chrome-addon/
 
 ### Prerequisites
 
-- **Python 3.8+** (Python 3.12 recommended)
-- **uv**: Fast Python package installer. Install with:
-  ```bash
-  pip install uv
-  ```
-- **Google Chrome** browser
-- **ChatGPT Account**: Access to https://chatgpt.com or https://chat.openai.com
+-   **Python 3.8+** (Python 3.12 recommended)
+-   **uv**: Fast Python package installer. Install with:
+    ```bash
+    pip install uv
+    ```
+-   **Google Chrome** browser
+-   **ChatGPT Account**: Access to https://chatgpt.com or https://chat.openai.com
 
 ### 1. Set Up the Python Backend Server
 
 1. **Navigate to the server directory:**
 
-   ```bash
-   cd server
-   ```
+    ```bash
+    cd server
+    ```
 
 2. **Install dependencies using uv:**
 
-   ```bash
-   uv sync
-   ```
+    ```bash
+    uv sync
+    ```
 
-   This installs all dependencies defined in `pyproject.toml`:
+    This installs all dependencies defined in `pyproject.toml`:
 
-   - `fastapi`: Web framework
-   - `uvicorn[standard]`: ASGI server
-   - `websockets`: WebSocket support
-   - `pydantic>=2.10.6`: Data validation
-   - `python-multipart>=0.0.20`: File upload support
+    - `fastapi`: Web framework
+    - `uvicorn[standard]`: ASGI server
+    - `websockets`: WebSocket support
+    - `pydantic>=2.10.6`: Data validation
+    - `python-multipart>=0.0.20`: File upload support
 
 3. **Run the FastAPI server:**
 
-   ```bash
-   cd server
-   python main.py
-   ```
+    ```bash
+    cd server
+    python main.py
+    ```
 
-   Or alternatively:
+    Or alternatively:
 
-   ```bash
-   uvicorn main:app --reload --host 0.0.0.0 --port 8000
-   ```
+    ```bash
+    uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    ```
 
 4. **Verify the server is running:**
-   - Open http://localhost:8000 in your browser
-   - You should see: "ChatGPT Addon Server is running."
-   - Check health status at: http://localhost:8000/health
+    - Open http://localhost:8000 in your browser
+    - You should see: "ChatGPT Addon Server is running."
+    - Check health status at: http://localhost:8000/health
 
 ### 2. Load the Chrome Extension
 
 1. **Open Chrome Extensions page:**
 
-   - Navigate to `chrome://extensions`
-   - Or click the puzzle icon → "Manage Extensions"
+    - Navigate to `chrome://extensions`
+    - Or click the puzzle icon → "Manage Extensions"
 
 2. **Enable Developer Mode:**
 
-   - Toggle the "Developer mode" switch in the top right corner
+    - Toggle the "Developer mode" switch in the top right corner
 
 3. **Load the extension:**
 
-   - Click "Load unpacked"
-   - Select the `chrome-addon` folder from your project directory
-   - The "ChatGPT Control Addon" should appear in your extensions list
+    - Click "Load unpacked"
+    - Select the `chrome-addon` folder from your project directory
+    - The "ChatGPT Control Addon" should appear in your extensions list
 
 4. **Verify the connection:**
 
-   - Click "Service worker" on the extension card to open the console
-   - Look for: `"WebSocket connection established."`
-   - If you see connection errors, ensure the Python server is running
+    - Click "Service worker" on the extension card to open the console
+    - Look for: `"WebSocket connection established."`
+    - If you see connection errors, ensure the Python server is running
 
 5. **Check the popup UI:**
-   - Click the extension icon in Chrome's toolbar
-   - Verify "WebSocket Status" shows "Connected" (green indicator)
+    - Click the extension icon in Chrome's toolbar
+    - Verify "WebSocket Status" shows "Connected" (green indicator)
 
 ### 3. Using the System
 
@@ -138,9 +139,9 @@ curl -X POST "http://localhost:8000/query" \
 
 ```json
 {
-  "status": "success",
-  "request_id": "a1b2c3d4e5f6...",
-  "response": "Quantum computing is a type of computing that..."
+    "status": "success",
+    "request_id": "a1b2c3d4e5f6...",
+    "response": "Quantum computing is a type of computing that..."
 }
 ```
 
@@ -197,6 +198,71 @@ curl -X POST "http://localhost:8000/query" \
      }'
 ```
 
+#### Request Image Generation
+
+Ask ChatGPT to generate an image. The system will automatically detect and return the generated image.
+
+**Important:** Set `useTemporaryChat: false` for image generation, as temp chat mode may interfere with image generation:
+
+```bash
+curl -X POST "http://localhost:8000/query" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "prompt": "Generate an image of a sunset at the beach",
+       "startNewChat": true,
+       "useTemporaryChat": false
+     }'
+```
+
+**Response with Generated Image:**
+
+```json
+{
+    "status": "success",
+    "request_id": "a1b2c3d4e5f6...",
+    "response": "I've created an image of a sunset at the beach for you...",
+    "generatedImage": {
+        "url": "https://chatgpt.com/backend-api/estuary/content?id=file_...",
+        "base64": "iVBORw0KGgoAAAANSUhEU...",
+        "alt": "Generiertes Bild"
+    }
+}
+```
+
+**Python Example to Save Generated Image:**
+
+```python
+import base64
+import requests
+from pathlib import Path
+
+response = requests.post(
+    "http://localhost:8000/query",
+    json={
+        "prompt": "Generate an image of a futuristic city",
+        "startNewChat": True,
+        "useTemporaryChat": False  # Disable temp chat for image generation
+    },
+    timeout=180
+)
+
+data = response.json()
+print(f"Response: {data['response']}")
+
+# Check if an image was generated
+if 'generatedImage' in data and data['generatedImage']:
+    image_data = data['generatedImage']
+    print(f"Generated image detected!")
+    print(f"  URL: {image_data['url']}")
+    print(f"  Alt: {image_data['alt']}")
+
+    # Decode and save the image
+    image_bytes = base64.b64decode(image_data['base64'])
+    output_path = Path("generated_image.png")
+    output_path.write_bytes(image_bytes)
+    print(f"  Saved to: {output_path.absolute()}")
+```
+
 ## API Reference
 
 ### Endpoints
@@ -217,9 +283,9 @@ Health check endpoint that reports server and addon connection status.
 
 ```json
 {
-  "status": "healthy", // "healthy" or "degraded"
-  "addon_connected": true, // WebSocket connection status
-  "pending_requests": 0 // Number of requests awaiting response
+    "status": "healthy", // "healthy" or "degraded"
+    "addon_connected": true, // WebSocket connection status
+    "pending_requests": 0 // Number of requests awaiting response
 }
 ```
 
@@ -233,9 +299,10 @@ Send a query with optional base64-encoded image to ChatGPT.
 
 ```json
 {
-  "prompt": "string", // Required: The text prompt
-  "image": "string", // Optional: Base64-encoded image
-  "startNewChat": true // Optional: Create new chat (default: true)
+    "prompt": "string", // Required: The text prompt
+    "image": "string", // Optional: Base64-encoded image
+    "startNewChat": true, // Optional: Create new chat (default: true)
+    "useTemporaryChat": true // Optional: Use temp chat mode (default: true, set false for image generation)
 }
 ```
 
@@ -243,27 +310,34 @@ Send a query with optional base64-encoded image to ChatGPT.
 
 ```json
 {
-  "status": "success",
-  "request_id": "uuid",
-  "response": "ChatGPT's response text"
+    "status": "success",
+    "request_id": "uuid",
+    "response": "ChatGPT's response text",
+    "generatedImage": {
+        "url": "string", // Original URL of the generated image
+        "base64": "string", // Base64-encoded image data
+        "alt": "string" // Alt text (usually "Generiertes Bild")
+    }
 }
 ```
+
+Note: `generatedImage` is only present when ChatGPT generates an image in response to your prompt.
 
 **Error Response:**
 
 ```json
 {
-  "status": "error",
-  "detail": "Error message"
+    "status": "error",
+    "detail": "Error message"
 }
 ```
 
 **Status Codes:**
 
-- `200`: Success
-- `400`: Invalid request or ChatGPT error
-- `503`: WebSocket not connected
-- `504`: Timeout waiting for response (120s)
+-   `200`: Success
+-   `400`: Invalid request or ChatGPT error
+-   `503`: WebSocket not connected
+-   `504`: Timeout waiting for response (120s)
 
 ---
 
@@ -273,9 +347,10 @@ Send a query with file upload (multipart/form-data).
 
 **Form Data:**
 
-- `prompt` (string, required): The text prompt
-- `image` (file, optional): Image file to upload
-- `startNewChat` (boolean, optional): Create new chat (default: true)
+-   `prompt` (string, required): The text prompt
+-   `image` (file, optional): Image file to upload
+-   `startNewChat` (boolean, optional): Create new chat (default: true)
+-   `useTemporaryChat` (boolean, optional): Use temp chat mode (default: true, set false for image generation)
 
 **Response:** Same as `/query` endpoint
 
@@ -325,18 +400,39 @@ If the ChatGPT window is not focused, the script will wait up to 30 seconds for 
 
 The content script uses a sophisticated detection system:
 
-- **MutationObserver:** Watches for new assistant messages in the DOM
-- **Stability Checking:** Ensures content has stopped changing (3 consecutive checks)
-- **Loading State Detection:** Ignores temporary "thinking" messages
-- **Polling Fallback:** 1-second interval polling as a safety net
-- **Timeout:** 60-second maximum wait time
+-   **MutationObserver:** Watches for new assistant messages in the DOM
+-   **Stability Checking:** Ensures content has stopped changing (3 consecutive checks)
+-   **Loading State Detection:** Ignores temporary "thinking" messages (e.g., "Bild wird analysiert")
+-   **Polling Fallback:** 1-second interval polling as a safety net
+-   **Timeout:** 60-second maximum wait time
+
+### Generated Image Detection
+
+When ChatGPT generates an image, the system automatically detects and retrieves it:
+
+1. **Detection:** Searches for `<img>` tags within elements with class `group/imagegen-image`
+2. **Download:** Fetches the image from ChatGPT's backend URL using `fetch()`
+3. **Encoding:** Converts the image to base64 format for easy transmission
+4. **Response:** Includes the image data in the response alongside the text
+
+**Image Response Structure:**
+
+```javascript
+{
+  url: "https://chatgpt.com/backend-api/estuary/content?id=...",
+  base64: "iVBORw0KGgoAAAANS...",  // Ready to decode and save
+  alt: "Generiertes Bild"
+}
+```
+
+The generated image is automatically included in the API response when detected, allowing clients to save or display the image programmatically.
 
 ### Chat Management
 
-- **New Chat Creation:** Clicks the "create new chat" button before sending
-- **Temporary Chat Mode:** Automatically activates temporary chat for privacy
-- **Tab Management:** Reuses existing ChatGPT tabs or creates new ones
-- **Focus Management:** Brings ChatGPT tab to front when needed
+-   **New Chat Creation:** Clicks the "create new chat" button before sending
+-   **Temporary Chat Mode:** Automatically activates temporary chat for privacy
+-   **Tab Management:** Reuses existing ChatGPT tabs or creates new ones
+-   **Focus Management:** Brings ChatGPT tab to front when needed
 
 ## Chrome Extension Components
 
@@ -344,41 +440,41 @@ The content script uses a sophisticated detection system:
 
 Defines extension metadata, permissions, and scripts:
 
-- **Permissions:** `scripting`, `activeTab`, `storage`
-- **Host Permissions:** `https://chat.openai.com/*`, `https://chatgpt.com/*`
-- **Background:** Service worker (`background.js`)
-- **Content Scripts:** Injected into ChatGPT pages (`content.js`)
+-   **Permissions:** `scripting`, `activeTab`, `storage`
+-   **Host Permissions:** `https://chat.openai.com/*`, `https://chatgpt.com/*`
+-   **Background:** Service worker (`background.js`)
+-   **Content Scripts:** Injected into ChatGPT pages (`content.js`)
 
 ### background.js
 
 Service worker that:
 
-- Establishes and maintains WebSocket connection to server
-- Handles automatic reconnection (5-second delay)
-- Routes messages between server and content scripts
-- Manages ChatGPT tab creation and focusing
-- Provides connection status to popup UI
+-   Establishes and maintains WebSocket connection to server
+-   Handles automatic reconnection (5-second delay)
+-   Routes messages between server and content scripts
+-   Manages ChatGPT tab creation and focusing
+-   Provides connection status to popup UI
 
 ### content.js
 
 Content script that:
 
-- Interacts with ChatGPT's DOM elements
-- Injects prompts and images into the chat interface
-- Monitors for and captures AI responses
-- Manages chat creation and temporary chat mode
-- Handles multiple image injection strategies
-- Provides detailed logging for debugging
+-   Interacts with ChatGPT's DOM elements
+-   Injects prompts and images into the chat interface
+-   Monitors for and captures AI responses
+-   Manages chat creation and temporary chat mode
+-   Handles multiple image injection strategies
+-   Provides detailed logging for debugging
 
 ### popup.html & popup.js
 
 Extension popup that displays:
 
-- WebSocket connection status (connected/disconnected/connecting)
-- Server URL
-- Current tab information
-- Whether current tab is a ChatGPT page
-- Extension version
+-   WebSocket connection status (connected/disconnected/connecting)
+-   Server URL
+-   Current tab information
+-   Whether current tab is a ChatGPT page
+-   Extension version
 
 ## Configuration
 
@@ -400,14 +496,14 @@ Edit `chrome-addon/background.js` to customize:
 
 ```javascript
 // WebSocket URL (line 5)
-websocket = new WebSocket("ws://localhost:8000/ws");
+websocket = new WebSocket('ws://localhost:8000/ws');
 
 // Reconnection delay (line 123)
 setTimeout(connectWebSocket, 5000); // 5 seconds
 
 // Page load timeout (line 55)
 setTimeout(() => {
-  /* ... */
+    /* ... */
 }, 30000); // 30 seconds
 ```
 
@@ -455,10 +551,10 @@ async function waitForUserFocus(timeoutMs = 30000)
 1. Open https://chatgpt.com and press F12 (DevTools)
 2. Right-click the element (input box, send button, message) → Inspect
 3. Update selectors in `content.js`:
-   - Input box: `#prompt-textarea` (line 670)
-   - Send button: `[data-testid="send-button"]` (line 713)
-   - Assistant messages: `div[data-message-author-role="assistant"]` (line 7)
-   - Markdown content: `.markdown` (line 15)
+    - Input box: `#prompt-textarea` (line 670)
+    - Send button: `[data-testid="send-button"]` (line 713)
+    - Assistant messages: `div[data-message-author-role="assistant"]` (line 7)
+    - Markdown content: `.markdown` (line 15)
 
 ---
 
@@ -510,9 +606,9 @@ async function waitForUserFocus(timeoutMs = 30000)
 
 **Solution:**
 
-- The addon searches for `https://chatgpt.com/*` tabs
-- Ensure you're using the correct ChatGPT URL
-- Check `background.js` line 18 for tab query logic
+-   The addon searches for `https://chatgpt.com/*` tabs
+-   Ensure you're using the correct ChatGPT URL
+-   Check `background.js` line 18 for tab query logic
 
 ## Development
 
@@ -536,14 +632,14 @@ uvicorn main:app --reload --log-level debug
 
 **Server Logs:**
 
-- Set log level: `logging.basicConfig(level=logging.DEBUG)`
-- View in terminal where server is running
+-   Set log level: `logging.basicConfig(level=logging.DEBUG)`
+-   View in terminal where server is running
 
 **Extension Logs:**
 
-- Background script: Click "Service worker" in `chrome://extensions`
-- Content script: Open DevTools on ChatGPT page (F12) → Console tab
-- Look for messages prefixed with `[GPT-CHROME-ADDON]`
+-   Background script: Click "Service worker" in `chrome://extensions`
+-   Content script: Open DevTools on ChatGPT page (F12) → Console tab
+-   Look for messages prefixed with `[GPT-CHROME-ADDON]`
 
 ### Testing
 
@@ -574,35 +670,35 @@ curl -X POST "http://localhost:8000/query" \
 
 ## Security Considerations
 
-- **Local Only:** Server runs on localhost by default (not exposed to internet)
-- **No Authentication:** No built-in authentication (add if exposing publicly)
-- **Temporary Chat:** Uses temporary chat mode for privacy
-- **CORS:** No CORS headers configured (add if needed for web clients)
-- **File Uploads:** Limited to images, validated by content type
+-   **Local Only:** Server runs on localhost by default (not exposed to internet)
+-   **No Authentication:** No built-in authentication (add if exposing publicly)
+-   **Temporary Chat:** Uses temporary chat mode for privacy
+-   **CORS:** No CORS headers configured (add if needed for web clients)
+-   **File Uploads:** Limited to images, validated by content type
 
 ## Known Limitations
 
-- **Single Connection:** Only one addon instance can connect to the server at a time
-- **ChatGPT Plus:** Image uploads require ChatGPT Plus subscription
-- **Rate Limits:** Subject to ChatGPT's rate limiting
-- **DOM Dependency:** Breaks if ChatGPT's HTML structure changes significantly
-- **Focus Requirement:** Some image injection methods require window focus
-- **Browser Only:** Chrome/Chromium-based browsers only (Manifest V3)
+-   **Single Connection:** Only one addon instance can connect to the server at a time
+-   **ChatGPT Plus:** Image uploads require ChatGPT Plus subscription
+-   **Rate Limits:** Subject to ChatGPT's rate limiting
+-   **DOM Dependency:** Breaks if ChatGPT's HTML structure changes significantly
+-   **Focus Requirement:** Some image injection methods require window focus
+-   **Browser Only:** Chrome/Chromium-based browsers only (Manifest V3)
 
 ## Future Enhancements
 
-- [ ] Multi-client support (multiple addon instances)
-- [ ] Authentication and API keys
-- [ ] Conversation history management
-- [ ] Support for GPT-4, GPT-3.5 model selection
-- [ ] Streaming responses (SSE or WebSocket)
-- [ ] Retry logic with exponential backoff
-- [ ] Configuration file for settings
-- [ ] Docker containerization
-- [ ] Firefox extension support
-- [ ] Web UI for server
-- [ ] Response caching
-- [ ] Batch query support
+-   [ ] Multi-client support (multiple addon instances)
+-   [ ] Authentication and API keys
+-   [ ] Conversation history management
+-   [ ] Support for GPT-4, GPT-3.5 model selection
+-   [ ] Streaming responses (SSE or WebSocket)
+-   [ ] Retry logic with exponential backoff
+-   [ ] Configuration file for settings
+-   [ ] Docker containerization
+-   [ ] Firefox extension support
+-   [ ] Web UI for server
+-   [ ] Response caching
+-   [ ] Batch query support
 
 ## Contributing
 
@@ -620,9 +716,9 @@ This project is provided as-is for educational and automation purposes. Ensure c
 
 ## Acknowledgments
 
-- Built with [FastAPI](https://fastapi.tiangolo.com/)
-- Uses [uv](https://github.com/astral-sh/uv) for Python package management
-- Chrome Extension Manifest V3
+-   Built with [FastAPI](https://fastapi.tiangolo.com/)
+-   Uses [uv](https://github.com/astral-sh/uv) for Python package management
+-   Chrome Extension Manifest V3
 
 ---
 
